@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Profiles.Qualities;
 
 namespace NzbDrone.Core.Tv
@@ -70,6 +71,7 @@ namespace NzbDrone.Core.Tv
         public List<Season> Seasons { get; set; }
         public HashSet<int> Tags { get; set; }
         public AddSeriesOptions AddOptions { get; set; }
+        public MetadataSourceType MetadataSource { get; set; }
 
         public override string ToString()
         {
@@ -95,6 +97,7 @@ namespace NzbDrone.Core.Tv
 
             Language = otherSeries.Language;
             SeasonType = otherSeries.SeasonType;
+            MetadataSource = otherSeries.MetadataSource;
         }
     }
 }

@@ -339,6 +339,7 @@ function ImportSeriesSelectSeries({
                     key={item.tvdbId}
                     id={`${resultsId}_${index}`}
                     tvdbId={item.tvdbId}
+                    tmdbId={item.tmdbId}
                     title={item.title}
                     year={item.year}
                     network={item.network}

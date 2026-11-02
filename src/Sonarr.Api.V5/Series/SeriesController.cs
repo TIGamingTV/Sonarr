@@ -1,9 +1,11 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.TPL;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.DataAugmentation.Scene;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Events;
@@ -11,6 +13,8 @@ using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.MetadataSource.Tmdb;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.SeriesStats;
@@ -43,6 +47,8 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
     private readonly ISeriesTranslationService _seriesTranslationService;
     private readonly IMapCoversToLocal _coverMapper;
     private readonly IRootFolderService _rootFolderService;
+    private readonly IConfigService _configService;
+    private readonly IProvideSeriesInfo _seriesInfo;
 
     private readonly LockByIdPool _seriesLockPool = new();
 
@@ -63,7 +69,10 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
                         QualityProfileExistsValidator qualityProfileExistsValidator,
                         RootFolderExistsValidator rootFolderExistsValidator,
                         SeriesFolderAsRootFolderValidator seriesFolderAsRootFolderValidator,
-                        SeriesSeasonTypeValidator seriesSeasonTypeValidator)
+                        SeriesSeasonTypeValidator seriesSeasonTypeValidator,
+                        IConfigService configService,
+                        IProvideSeriesInfo seriesInfo,
+                        ITmdbProxy tmdbProxy)
         : base(signalRBroadcaster)
     {
         _seriesService = seriesService;
@@ -74,6 +83,8 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
 
         _coverMapper = coverMapper;
         _rootFolderService = rootFolderService;
+        _configService = configService;
+        _seriesInfo = seriesInfo;
 
         SharedValidator.RuleFor(s => s.Path).Cascade(CascadeMode.Stop)
             .IsValidPath()
@@ -112,7 +123,19 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
         PutValidator.RuleFor(s => s.SeasonType).SetValidator(seriesSeasonTypeValidator);
 
         PostValidator.RuleFor(s => s.Title).NotEmpty();
-        PostValidator.RuleFor(s => s.TvdbId).GreaterThan(0).SetValidator(seriesExistsValidator);
+
+        // Negative TVDB IDs are placeholders for series that are only available on TMDB
+        PostValidator.RuleFor(s => s.TvdbId).NotEqual(0).SetValidator(seriesExistsValidator);
+
+        SharedValidator.RuleFor(s => s.MetadataSource)
+            .Must(_ => tmdbProxy.IsConfigured)
+            .When(s => s.MetadataSource == MetadataSourceType.Tmdb || s.TvdbId < 0)
+            .WithMessage("A TMDB API key must be configured to use TMDB as the metadata source");
+
+        SharedValidator.RuleFor(s => s.MetadataSource)
+            .Must((s, _) => s.TvdbId > 0)
+            .When(s => s.MetadataSource == MetadataSourceType.Tvdb)
+            .WithMessage("This series is not available on TheTVDB");
     }
 
     [HttpGet]
@@ -194,7 +217,14 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
     [Produces("application/json")]
     public Results<Created<SeriesResource>, NotFound> AddSeries([FromBody] SeriesResource seriesResource)
     {
-        var series = _addSeriesService.AddSeries(seriesResource.ToModel());
+        var model = seriesResource.ToModel();
+
+        if (seriesResource.MetadataSource == null && model.TvdbId > 0)
+        {
+            model.MetadataSource = _configService.DefaultMetadataSource;
+        }
+
+        var series = _addSeriesService.AddSeries(model);
 
         return TypedCreated(series.Id);
     }
@@ -208,7 +238,24 @@ public class SeriesController : RestControllerWithSignalR<SeriesResource, NzbDro
         var sourcePath = series.Path;
         var destinationPath = seriesResource.Path;
 
+        var metadataSource = series.MetadataSource;
+
         var model = seriesResource.ToModel(series);
+
+        if (model.MetadataSource == MetadataSourceType.Tmdb && metadataSource != MetadataSourceType.Tmdb)
+        {
+            var tmdbId = _seriesInfo.ResolveTmdbId(model);
+
+            if (tmdbId <= 0)
+            {
+                throw new ValidationException(new List<ValidationFailure>
+                {
+                    new("MetadataSource", "Unable to find this series on TMDB")
+                });
+            }
+
+            model.TmdbId = tmdbId;
+        }
 
         _seriesService.UpdateSeries(model, sourcePath, destinationPath, moveFiles);
 

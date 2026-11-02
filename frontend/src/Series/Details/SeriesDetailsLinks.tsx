@@ -23,7 +23,8 @@ function SeriesDetailsLinks(props: SeriesDetailsLinksProps) {
   const links = useMemo(() => {
     const validLinks: SeriesDetailsLink[] = [];
 
-    if (tvdbId) {
+    // Negative TVDB IDs are placeholders for TMDB only series
+    if (tvdbId > 0) {
       validLinks.push({
         externalId: tvdbId,
         name: 'TheTVDB',

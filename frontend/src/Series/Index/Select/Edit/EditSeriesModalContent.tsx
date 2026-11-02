@@ -23,6 +23,7 @@ interface SavePayload {
   monitorNewItems?: string;
   qualityProfileId?: number;
   seriesType?: string;
+  metadataSource?: string;
   seasonFolder?: boolean;
   rootFolderPath?: string;
   moveFiles?: boolean;
@@ -79,6 +80,24 @@ const seasonFolderOptions: EnhancedSelectInputValue<string>[] = [
   },
 ];
 
+const metadataSourceOptions: EnhancedSelectInputValue<string>[] = [
+  {
+    key: NO_CHANGE,
+    get value() {
+      return translate('NoChange');
+    },
+    isDisabled: true,
+  },
+  {
+    key: 'tvdb',
+    value: 'TheTVDB',
+  },
+  {
+    key: 'tmdb',
+    value: 'TMDB',
+  },
+];
+
 function EditSeriesModalContent(props: EditSeriesModalContentProps) {
   const { onSavePress, onModalClose } = props;
 
@@ -89,6 +108,7 @@ function EditSeriesModalContent(props: EditSeriesModalContentProps) {
     NO_CHANGE
   );
   const [seriesType, setSeriesType] = useState(NO_CHANGE);
+  const [metadataSource, setMetadataSource] = useState(NO_CHANGE);
   const [seasonFolder, setSeasonFolder] = useState(NO_CHANGE);
   const [rootFolderPath, setRootFolderPath] = useState(NO_CHANGE);
   const [isConfirmMoveModalOpen, setIsConfirmMoveModalOpen] = useState(false);
@@ -124,6 +144,11 @@ function EditSeriesModalContent(props: EditSeriesModalContentProps) {
         payload.seriesType = seriesType;
       }
 
+      if (metadataSource !== NO_CHANGE) {
+        hasChanges = true;
+        payload.metadataSource = metadataSource;
+      }
+
       if (seasonFolder !== NO_CHANGE) {
         hasChanges = true;
         payload.seasonFolder = seasonFolder === 'yes';
@@ -147,6 +172,7 @@ function EditSeriesModalContent(props: EditSeriesModalContentProps) {
       monitorNewItems,
       qualityProfileId,
       seriesType,
+      metadataSource,
       seasonFolder,
       rootFolderPath,
       onSavePress,
@@ -171,6 +197,9 @@ function EditSeriesModalContent(props: EditSeriesModalContentProps) {
           break;
         case 'seriesType':
           setSeriesType(value as string);
+          break;
+        case 'metadataSource':
+          setMetadataSource(value as string);
           break;
         case 'seasonFolder':
           setSeasonFolder(value as string);
@@ -272,6 +301,26 @@ function EditSeriesModalContent(props: EditSeriesModalContentProps) {
             value={seriesType}
             includeNoChange={true}
             includeNoChangeDisabled={false}
+            onChange={onInputChange}
+          />
+        </FormRow>
+
+        <FormRow>
+          <FormLabel>{translate('MetadataSource')}</FormLabel>
+          <FormInputHelpText text={translate('MetadataSourceHelpText')} />
+          <FormInputHelpText
+            text={
+              metadataSource === NO_CHANGE
+                ? undefined
+                : translate('MetadataSourceChangeHelpTextWarning')
+            }
+            isWarning={true}
+          />
+          <FormInput
+            type={inputTypes.SELECT}
+            name="metadataSource"
+            value={metadataSource}
+            values={metadataSourceOptions}
             onChange={onInputChange}
           />
         </FormRow>

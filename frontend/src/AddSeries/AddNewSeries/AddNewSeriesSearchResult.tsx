@@ -8,6 +8,11 @@ import Link from 'Components/Link/Link';
 import MetadataAttribution from 'Components/MetadataAttribution';
 import { icons } from 'Helpers/Props';
 import { useLanguageById } from 'Language/useLanguages';
+import {
+  getTmdbUrl,
+  getTvdbUrl,
+  useMetadataSourceSettingsInfo,
+} from 'Series/metadataSource';
 import { Statistics } from 'Series/Series';
 import SeriesGenres from 'Series/SeriesGenres';
 import SeriesPoster from 'Series/SeriesPoster';
@@ -40,6 +45,7 @@ interface AddNewSeriesSearchResultProps {
 function AddNewSeriesSearchResult({ series }: AddNewSeriesSearchResultProps) {
   const {
     tvdbId,
+    tmdbId,
     title: lookupTitle,
     originalTitle,
     year,
@@ -59,6 +65,7 @@ function AddNewSeriesSearchResult({ series }: AddNewSeriesSearchResultProps) {
   const { preferredMetadataLanguage } = useMetadataSourceSettingsValues();
   const language = useLanguageById(preferredMetadataLanguage);
   const isExistingSeries = useExistingSeries(tvdbId);
+  const { isTmdbConfigured } = useMetadataSourceSettingsInfo();
   const isSmallScreen = useAppDimension('isSmallScreen');
   const [isNewAddSeriesModalOpen, setIsNewAddSeriesModalOpen] = useState(false);
 
@@ -89,6 +96,12 @@ function AddNewSeriesSearchResult({ series }: AddNewSeriesSearchResultProps) {
   }
 
   const statusChip = getStatusChip(status);
+  const isTvdbSeries = tvdbId > 0;
+  const isTmdbSeries = tmdbId > 0;
+  const providers = [
+    ...(isTvdbSeries ? ['TheTVDB'] : []),
+    ...(isTmdbSeries && (!isTvdbSeries || isTmdbConfigured) ? ['TMDB'] : []),
+  ];
 
   return (
     <div
@@ -150,8 +163,12 @@ function AddNewSeriesSearchResult({ series }: AddNewSeriesSearchResultProps) {
 
               <Link
                 className={styles.tvdbLink}
-                to={`https://www.thetvdb.com/?tab=series&id=${tvdbId}`}
-                aria-label={translate('ViewSeriesOnTvdb', { title })}
+                to={isTvdbSeries ? getTvdbUrl(tvdbId) : getTmdbUrl(tmdbId)}
+                aria-label={
+                  isTvdbSeries
+                    ? translate('ViewSeriesOnTvdb', { title })
+                    : translate('ViewSeriesOnTmdb', { title })
+                }
                 onPress={handleTvdbLinkPress}
               >
                 <Icon name={icons.EXTERNAL_LINK} size={16} aria-hidden={true} />
@@ -192,11 +209,17 @@ function AddNewSeriesSearchResult({ series }: AddNewSeriesSearchResultProps) {
             {seasonCount ? (
               <span className={styles.chip}>{seasons}</span>
             ) : null}
+
+            {providers.map((provider) => (
+              <span key={provider} className={styles.chip}>
+                {provider}
+              </span>
+            ))}
           </div>
 
           <div className={styles.overview}>{overview}</div>
 
-          <MetadataAttribution />
+          <MetadataAttribution providers={providers} />
         </div>
       </div>
 

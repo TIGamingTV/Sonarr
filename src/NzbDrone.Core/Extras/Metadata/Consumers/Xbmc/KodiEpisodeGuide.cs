@@ -26,7 +26,7 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
         public KodiEpisodeGuide(Series series)
         {
-            Tvdb = series.TvdbId.ToString();
+            Tvdb = series.TvdbId > 0 ? series.TvdbId.ToString() : null;
             TvMaze = series.TvMazeId > 0 ? series.TvMazeId.ToString() : null;
             TvRage = series.TvRageId > 0 ? series.TvRageId.ToString() : null;
             Tmdb = series.TmdbId > 0 ? series.TmdbId.ToString() : null;

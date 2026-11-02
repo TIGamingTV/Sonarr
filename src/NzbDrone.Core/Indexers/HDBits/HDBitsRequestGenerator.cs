@@ -138,7 +138,7 @@ namespace NzbDrone.Core.Indexers.HDBits
 
         private bool TryAddSearchParameters(TorrentQuery query, SearchCriteriaBase searchCriteria)
         {
-            if (searchCriteria.Series.TvdbId != 0)
+            if (searchCriteria.Series.TvdbId > 0)
             {
                 query.TvdbInfo ??= new TvdbInfo();
                 query.TvdbInfo.Id = searchCriteria.Series.TvdbId;

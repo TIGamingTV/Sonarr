@@ -66,7 +66,7 @@ namespace NzbDrone.Core.Tv
 
             try
             {
-                var tuple = _seriesInfo.GetSeriesInfo(series.TvdbId, series.Language, series.SeasonType);
+                var tuple = _seriesInfo.GetSeriesInfo(series);
                 seriesInfo = tuple.Item1;
                 episodes = tuple.Item2;
             }
@@ -83,21 +83,39 @@ namespace NzbDrone.Core.Tv
                 throw;
             }
 
-            if (series.TvdbId != seriesInfo.TvdbId)
+            var metadataSource = _seriesInfo.GetMetadataSource(series);
+
+            if (metadataSource == MetadataSourceType.Tmdb)
+            {
+                UpdateTvdbIdFromTmdb(series, seriesInfo);
+            }
+            else if (series.TvdbId != seriesInfo.TvdbId)
             {
                 _logger.Warn("Series '{0}' (tvdbid {1}) was replaced with '{2}' (tvdbid {3}), because the original was a duplicate.", series.Title, series.TvdbId, seriesInfo.Title, seriesInfo.TvdbId);
                 series.TvdbId = seriesInfo.TvdbId;
             }
 
+            series.MetadataSource = metadataSource;
             series.Title = seriesInfo.Title;
             series.Year = seriesInfo.Year;
-            series.TitleSlug = seriesInfo.TitleSlug;
-            series.TvRageId = seriesInfo.TvRageId;
-            series.TvMazeId = seriesInfo.TvMazeId;
-            series.TmdbId = seriesInfo.TmdbId;
-            series.ImdbId = seriesInfo.ImdbId;
-            series.MalIds = seriesInfo.MalIds;
-            series.AniListIds = seriesInfo.AniListIds;
+
+            // Keep the existing slug when TMDB is used so links don't change when switching sources
+            if (metadataSource == MetadataSourceType.Tvdb || series.TitleSlug.IsNullOrWhiteSpace())
+            {
+                series.TitleSlug = seriesInfo.TitleSlug;
+            }
+
+            series.TvRageId = seriesInfo.TvRageId > 0 || metadataSource == MetadataSourceType.Tvdb ? seriesInfo.TvRageId : series.TvRageId;
+            series.TvMazeId = seriesInfo.TvMazeId > 0 || metadataSource == MetadataSourceType.Tvdb ? seriesInfo.TvMazeId : series.TvMazeId;
+            series.TmdbId = seriesInfo.TmdbId > 0 ? seriesInfo.TmdbId : series.TmdbId;
+            series.ImdbId = seriesInfo.ImdbId.IsNotNullOrWhiteSpace() || metadataSource == MetadataSourceType.Tvdb ? seriesInfo.ImdbId : series.ImdbId;
+
+            if (metadataSource == MetadataSourceType.Tvdb)
+            {
+                series.MalIds = seriesInfo.MalIds;
+                series.AniListIds = seriesInfo.AniListIds;
+            }
+
             series.AirTime = seriesInfo.AirTime;
             series.Overview = seriesInfo.Overview;
             series.OriginalLanguage = seriesInfo.OriginalLanguage;
@@ -139,6 +157,26 @@ namespace NzbDrone.Core.Tv
             _eventAggregator.PublishEvent(new SeriesUpdatedEvent(series));
 
             return series;
+        }
+
+        private void UpdateTvdbIdFromTmdb(Series series, Series seriesInfo)
+        {
+            // TheTVDB stays authoritative for the TVDB ID if the series already has one
+            if (series.TvdbId > 0 || seriesInfo.TvdbId <= 0 || series.TvdbId == seriesInfo.TvdbId)
+            {
+                return;
+            }
+
+            var existing = _seriesService.FindByTvdbId(seriesInfo.TvdbId);
+
+            if (existing != null && existing.Id != series.Id)
+            {
+                _logger.Debug("TMDB maps '{0}' to tvdbid {1}, but it's already used by '{2}', keeping placeholder ID", series.Title, seriesInfo.TvdbId, existing.Title);
+                return;
+            }
+
+            _logger.Info("Series '{0}' is now available on TheTVDB, updating tvdbid from {1} to {2}", series.Title, series.TvdbId, seriesInfo.TvdbId);
+            series.TvdbId = seriesInfo.TvdbId;
         }
 
         private List<Season> UpdateSeasons(Series series, Series seriesInfo)

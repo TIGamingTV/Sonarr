@@ -18,7 +18,17 @@ using NzbDrone.Core.Tv;
 
 namespace NzbDrone.Core.MetadataSource.SkyHook
 {
-    public class SkyHookProxy : IProvideSeriesInfo, ISearchForNewSeries
+    public interface ISkyHookProxy
+    {
+        Tuple<Series, List<Episode>> GetSeriesInfo(int tvdbSeriesId, Language language, string seasonType);
+        List<Series> SearchForNewSeries(string title, Language language);
+        List<Series> SearchForNewSeriesByImdbId(string imdbId, Language language);
+        List<Series> SearchForNewSeriesByAniListId(int aniListId, Language language);
+        List<Series> SearchForNewSeriesByTmdbId(int tmdbId, Language language);
+        List<Series> SearchForNewSeriesByMyAnimeListId(int malId, Language language);
+    }
+
+    public class SkyHookProxy : ISkyHookProxy
     {
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;

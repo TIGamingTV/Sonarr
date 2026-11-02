@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaCover;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Tv;
 using Sonarr.Http.REST;
 using Swashbuckle.AspNetCore.Annotations;
@@ -42,6 +43,7 @@ public class SeriesResource : RestResource
     public int TvRageId { get; set; }
     public int TvMazeId { get; set; }
     public int TmdbId { get; set; }
+    public MetadataSourceType? MetadataSource { get; set; }
     public HashSet<int>? MalIds { get; set; }
     public HashSet<int>? AniListIds { get; set; }
     public DateTime? FirstAired { get; set; }
@@ -103,6 +105,7 @@ public static class SeriesResourceMapper
             TvRageId = model.TvRageId,
             TvMazeId = model.TvMazeId,
             TmdbId = model.TmdbId,
+            MetadataSource = model.TvdbId < 0 ? MetadataSourceType.Tmdb : model.MetadataSource,
             MalIds = model.MalIds,
             AniListIds = model.AniListIds,
             FirstAired = model.FirstAired,
@@ -150,6 +153,7 @@ public static class SeriesResourceMapper
             TvRageId = resource.TvRageId,
             TvMazeId = resource.TvMazeId,
             TmdbId = resource.TmdbId,
+            MetadataSource = resource.MetadataSource ?? (resource.TvdbId < 0 ? MetadataSourceType.Tmdb : MetadataSourceType.Tvdb),
             MalIds = resource.MalIds,
             AniListIds = resource.AniListIds,
             FirstAired = resource.FirstAired,
@@ -172,6 +176,12 @@ public static class SeriesResourceMapper
     public static NzbDrone.Core.Tv.Series ToModel(this SeriesResource resource, NzbDrone.Core.Tv.Series series)
     {
         var updatedSeries = resource.ToModel();
+
+        // Keep the current metadata source if the client didn't send one
+        if (resource.MetadataSource == null)
+        {
+            updatedSeries.MetadataSource = series.MetadataSource;
+        }
 
         series.ApplyChanges(updatedSeries);
 

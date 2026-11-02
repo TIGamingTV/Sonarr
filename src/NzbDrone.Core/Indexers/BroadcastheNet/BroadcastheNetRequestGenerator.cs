@@ -234,13 +234,13 @@ namespace NzbDrone.Core.Indexers.BroadcastheNet
 
         private bool AddSeriesSearchParameters(BroadcastheNetTorrentQuery parameters, SearchCriteriaBase searchCriteria)
         {
-            if (searchCriteria.Series.TvdbId != 0)
+            if (searchCriteria.Series.TvdbId > 0)
             {
                 parameters.Tvdb = $"{searchCriteria.Series.TvdbId}";
                 return true;
             }
 
-            if (searchCriteria.Series.TvRageId != 0)
+            if (searchCriteria.Series.TvRageId > 0)
             {
                 parameters.Tvrage = $"{searchCriteria.Series.TvRageId}";
                 return true;

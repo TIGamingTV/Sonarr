@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Tv;
+using NzbDrone.Core.Tv.Commands;
 using Sonarr.Http;
 
 namespace Sonarr.Api.V5.Series;
@@ -13,11 +15,13 @@ public class SeriesEditorController : Controller
 {
     private readonly ISeriesService _seriesService;
     private readonly SeriesEditorValidator _seriesEditorValidator;
+    private readonly IManageCommandQueue _commandQueueManager;
 
-    public SeriesEditorController(ISeriesService seriesService, SeriesEditorValidator seriesEditorValidator)
+    public SeriesEditorController(ISeriesService seriesService, SeriesEditorValidator seriesEditorValidator, IManageCommandQueue commandQueueManager)
     {
         _seriesService = seriesService;
         _seriesEditorValidator = seriesEditorValidator;
+        _commandQueueManager = commandQueueManager;
     }
 
     [HttpPut]
@@ -26,9 +30,16 @@ public class SeriesEditorController : Controller
     public Results<Ok<List<SeriesResource>>, BadRequest> SaveAll([FromBody] SeriesEditorResource resource)
     {
         var seriesToUpdate = _seriesService.GetSeries(resource.SeriesIds);
+        var seriesToRefresh = new List<int>();
 
         foreach (var series in seriesToUpdate)
         {
+            if (resource.MetadataSource.HasValue && series.MetadataSource != resource.MetadataSource.Value)
+            {
+                series.MetadataSource = resource.MetadataSource.Value;
+                seriesToRefresh.Add(series.Id);
+            }
+
             if (resource.Monitored.HasValue)
             {
                 series.Monitored = resource.Monitored.Value;
@@ -92,6 +103,11 @@ public class SeriesEditorController : Controller
         }
 
         var updated = _seriesService.UpdateSeries(seriesToUpdate, resource.MoveFiles);
+
+        if (seriesToRefresh.Any())
+        {
+            _commandQueueManager.Push(new RefreshSeriesCommand(seriesToRefresh));
+        }
 
         return TypedResults.Ok(updated.ToResource());
     }

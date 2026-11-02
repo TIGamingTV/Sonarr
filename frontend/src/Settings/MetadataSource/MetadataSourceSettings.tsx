@@ -6,19 +6,26 @@ import FormInput from 'Components/Form/FormInput';
 import FormInputHelpText from 'Components/Form/FormInputHelpText';
 import FormLabel from 'Components/Form/FormLabel';
 import FormRow from 'Components/Form/FormRow';
-import { LanguageSelectInputOnChangeProps } from 'Components/Form/Select/LanguageSelectInput';
+import { EnhancedSelectInputValue } from 'Components/Form/Select/EnhancedSelectInput';
 import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContentBody from 'Components/Page/PageContentBody';
 import PageHeading from 'Components/Page/PageHeading';
 import { inputTypes, kinds } from 'Helpers/Props';
 import settingsStyles from 'Settings/Settings.module.css';
 import SettingsPage from 'Settings/SettingsPage';
+import { InputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import TheTvdb from './TheTvdb';
+import Tmdb from './Tmdb';
 import {
   MetadataSourceSettingsModel,
   useManageMetadataSourceSettings,
 } from './useMetadataSourceSettings';
+
+const metadataSourceOptions: EnhancedSelectInputValue<string>[] = [
+  { key: 'tvdb', value: 'TheTVDB' },
+  { key: 'tmdb', value: 'TMDB' },
+];
 
 function MetadataSourceSettings() {
   const {
@@ -36,8 +43,11 @@ function MetadataSourceSettings() {
   } = useManageMetadataSourceSettings();
 
   const handleInputChange = useCallback(
-    ({ name, value }: LanguageSelectInputOnChangeProps) => {
-      updateSetting(name as keyof MetadataSourceSettingsModel, value as number);
+    ({ name, value }: InputChanged) => {
+      updateSetting(
+        name as keyof MetadataSourceSettingsModel,
+        value as MetadataSourceSettingsModel[keyof MetadataSourceSettingsModel]
+      );
     },
     [updateSetting]
   );
@@ -92,11 +102,41 @@ function MetadataSourceSettings() {
                   />
                 </FormRow>
               </FieldSet>
+
+              <FieldSet legend="TMDB">
+                <FormRow>
+                  <FormLabel>{translate('TmdbApiKey')}</FormLabel>
+
+                  <FormInputHelpText text={translate('TmdbApiKeyHelpText')} />
+                  <FormInput
+                    type={inputTypes.PASSWORD}
+                    name="tmdbApiKey"
+                    onChange={handleInputChange}
+                    {...settings.tmdbApiKey}
+                  />
+                </FormRow>
+
+                <FormRow>
+                  <FormLabel>{translate('DefaultMetadataSource')}</FormLabel>
+
+                  <FormInputHelpText
+                    text={translate('DefaultMetadataSourceHelpText')}
+                  />
+                  <FormInput
+                    type={inputTypes.SELECT}
+                    name="defaultMetadataSource"
+                    values={metadataSourceOptions}
+                    onChange={handleInputChange}
+                    {...settings.defaultMetadataSource}
+                  />
+                </FormRow>
+              </FieldSet>
             </Form>
           ) : null}
 
           <FieldSet legend={translate('Source')}>
             <TheTvdb />
+            <Tmdb />
           </FieldSet>
         </div>
       </PageContentBody>

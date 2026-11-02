@@ -1,4 +1,5 @@
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Tv;
 
 namespace Sonarr.Api.V5.Series;
@@ -11,6 +12,7 @@ public class SeriesEditorResource
     public int? QualityProfileId { get; set; }
     public Language? Language { get; set; }
     public SeriesTypes? SeriesType { get; set; }
+    public MetadataSourceType? MetadataSource { get; set; }
     public bool? SeasonFolder { get; set; }
     public string? RootFolderPath { get; set; }
     public List<int> Tags { get; set; } = [];

@@ -9,6 +9,7 @@ using NzbDrone.Common.EnsureThat;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.MetadataSource.Tmdb;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
 
@@ -24,18 +25,21 @@ namespace NzbDrone.Core.Tv
     {
         private readonly ISeriesService _seriesService;
         private readonly IProvideSeriesInfo _seriesInfo;
+        private readonly ITmdbProxy _tmdbProxy;
         private readonly IBuildFileNames _fileNameBuilder;
         private readonly IAddSeriesValidator _addSeriesValidator;
         private readonly Logger _logger;
 
         public AddSeriesService(ISeriesService seriesService,
                                 IProvideSeriesInfo seriesInfo,
+                                ITmdbProxy tmdbProxy,
                                 IBuildFileNames fileNameBuilder,
                                 IAddSeriesValidator addSeriesValidator,
                                 Logger logger)
         {
             _seriesService = seriesService;
             _seriesInfo = seriesInfo;
+            _tmdbProxy = tmdbProxy;
             _fileNameBuilder = fileNameBuilder;
             _addSeriesValidator = addSeriesValidator;
             _logger = logger;
@@ -108,9 +112,11 @@ namespace NzbDrone.Core.Tv
         {
             Tuple<Series, List<Episode>> tuple;
 
+            SetMetadataSource(newSeries);
+
             try
             {
-                tuple = _seriesInfo.GetSeriesInfo(newSeries.TvdbId, newSeries.Language, newSeries.SeasonType);
+                tuple = _seriesInfo.GetSeriesInfo(newSeries);
             }
             catch (SeriesNotFoundException)
             {
@@ -127,9 +133,72 @@ namespace NzbDrone.Core.Tv
             // If seasons were passed in on the new series use them, otherwise use the seasons from Skyhook
             newSeries.Seasons = newSeries.Seasons != null && newSeries.Seasons.Any() ? newSeries.Seasons : series.Seasons;
 
+            var titleSlug = newSeries.TitleSlug;
+
             series.ApplyChanges(newSeries);
 
+            // Keep TMDB IDs found while merging search results if TheTVDB doesn't know them
+            if (series.TmdbId <= 0 && newSeries.TmdbId > 0)
+            {
+                series.TmdbId = newSeries.TmdbId;
+            }
+
+            if (series.MetadataSource == MetadataSourceType.Tmdb)
+            {
+                // Prefer the slug from the lookup (e.g. TheTVDB's slug for series that exist on both)
+                if (titleSlug.IsNotNullOrWhiteSpace())
+                {
+                    series.TitleSlug = titleSlug;
+                }
+            }
+
             return series;
+        }
+
+        private void SetMetadataSource(Series newSeries)
+        {
+            if (newSeries.TvdbId < 0)
+            {
+                newSeries.MetadataSource = MetadataSourceType.Tmdb;
+
+                if (newSeries.TmdbId <= 0)
+                {
+                    newSeries.TmdbId = -newSeries.TvdbId;
+                }
+            }
+
+            if (newSeries.MetadataSource != MetadataSourceType.Tmdb)
+            {
+                return;
+            }
+
+            if (!_tmdbProxy.IsConfigured)
+            {
+                if (newSeries.TvdbId > 0)
+                {
+                    _logger.Warn("TMDB is not configured, adding {0} using TheTVDB instead", newSeries);
+                    newSeries.MetadataSource = MetadataSourceType.Tvdb;
+
+                    return;
+                }
+
+                throw new ValidationException(new List<ValidationFailure>
+                                              {
+                                                  new ValidationFailure("MetadataSource", "A TMDB API key is required to add series that are only available on TMDB")
+                                              });
+            }
+
+            var tmdbId = _seriesInfo.ResolveTmdbId(newSeries);
+
+            if (tmdbId <= 0)
+            {
+                _logger.Warn("Unable to find {0} on TMDB, adding it using TheTVDB instead", newSeries);
+                newSeries.MetadataSource = MetadataSourceType.Tvdb;
+
+                return;
+            }
+
+            newSeries.TmdbId = tmdbId;
         }
 
         private Series SetPropertiesAndValidate(Series newSeries)

@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { MetadataSource } from 'Series/Series';
 import {
   useManageSettings,
   useSaveSettings,
@@ -7,6 +8,8 @@ import {
 
 export interface MetadataSourceSettingsModel {
   preferredMetadataLanguage: number;
+  tmdbApiKey: string;
+  defaultMetadataSource: MetadataSource;
 }
 
 const PATH = '/settings/metadata';

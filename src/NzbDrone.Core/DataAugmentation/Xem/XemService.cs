@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Core.DataAugmentation.Scene;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Tv;
 using NzbDrone.Core.Tv.Events;
 
@@ -37,6 +38,31 @@ namespace NzbDrone.Core.DataAugmentation.Xem
 
             try
             {
+                // XEM maps scene numbering to TheTVDB's numbering, it doesn't apply to TMDB numbering
+                if (series.MetadataSource == MetadataSourceType.Tmdb || series.TvdbId <= 0)
+                {
+                    _logger.Debug("{0} is using TMDB for metadata, skipping", series);
+
+                    if (series.UseSceneNumbering)
+                    {
+                        var tmdbEpisodes = _episodeService.GetEpisodeBySeries(series.Id);
+
+                        foreach (var episode in tmdbEpisodes)
+                        {
+                            episode.SceneAbsoluteEpisodeNumber = null;
+                            episode.SceneSeasonNumber = null;
+                            episode.SceneEpisodeNumber = null;
+                            episode.UnverifiedSceneNumbering = false;
+                        }
+
+                        _episodeService.UpdateEpisodes(tmdbEpisodes);
+                        series.UseSceneNumbering = false;
+                        _seriesService.UpdateSeries(series);
+                    }
+
+                    return;
+                }
+
                 if (series.SeasonType != SeasonType.Official)
                 {
                     _logger.Debug("{0} is not using official aired order, skipping", series);

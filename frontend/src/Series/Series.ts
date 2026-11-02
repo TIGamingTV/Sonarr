@@ -82,6 +82,8 @@ export interface SeasonType {
   episodeCount: number;
 }
 
+export type MetadataSource = 'tvdb' | 'tmdb';
+
 interface Series extends ModelBase {
   added: string;
   alternateTitles: AlternateTitle[];
@@ -122,6 +124,7 @@ interface Series extends ModelBase {
   tvMazeId: number;
   tvRageId: number;
   tmdbId: number;
+  metadataSource: MetadataSource;
   useSceneNumbering: boolean;
   seasonType: string;
   seasonTypes: SeasonType[];

@@ -11,6 +11,7 @@ using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.EpisodeImport;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Security;
 
@@ -394,6 +395,20 @@ namespace NzbDrone.Core.Configuration
             get { return GetValueInt("PreferredMetadataLanguage", (int)Language.English); }
 
             set { SetValue("PreferredMetadataLanguage", value); }
+        }
+
+        public string TmdbApiKey
+        {
+            get { return GetValue("TmdbApiKey", string.Empty); }
+
+            set { SetValue("TmdbApiKey", value); }
+        }
+
+        public MetadataSourceType DefaultMetadataSource
+        {
+            get { return GetValueEnum("DefaultMetadataSource", MetadataSourceType.Tvdb); }
+
+            set { SetValue("DefaultMetadataSource", value); }
         }
 
         public bool CleanupMetadataImages

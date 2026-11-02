@@ -4,6 +4,7 @@ using System.Linq;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaCover;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Tv;
 using Sonarr.Http.REST;
 
@@ -57,6 +58,7 @@ namespace Sonarr.Api.V3.Series
         public int TvRageId { get; set; }
         public int TvMazeId { get; set; }
         public int TmdbId { get; set; }
+        public MetadataSourceType? MetadataSource { get; set; }
         public DateTime? FirstAired { get; set; }
         public DateTime? LastAired { get; set; }
         public SeriesTypes SeriesType { get; set; }
@@ -136,6 +138,7 @@ namespace Sonarr.Api.V3.Series
                        TvRageId = model.TvRageId,
                        TvMazeId = model.TvMazeId,
                        TmdbId = model.TmdbId,
+                       MetadataSource = model.TvdbId < 0 ? MetadataSourceType.Tmdb : model.MetadataSource,
                        FirstAired = model.FirstAired,
                        LastAired = model.LastAired,
                        SeriesType = model.SeriesType,
@@ -208,6 +211,7 @@ namespace Sonarr.Api.V3.Series
                        TvRageId = resource.TvRageId,
                        TvMazeId = resource.TvMazeId,
                        TmdbId = resource.TmdbId,
+                       MetadataSource = resource.MetadataSource ?? (resource.TvdbId < 0 ? MetadataSourceType.Tmdb : MetadataSourceType.Tvdb),
                        FirstAired = resource.FirstAired,
                        SeriesType = resource.SeriesType,
                        CleanTitle = resource.CleanTitle,
@@ -229,6 +233,12 @@ namespace Sonarr.Api.V3.Series
         public static NzbDrone.Core.Tv.Series ToModel(this SeriesResource resource, NzbDrone.Core.Tv.Series series)
         {
             var updatedSeries = resource.ToModel();
+
+            // Keep the current metadata source if the client didn't send one
+            if (resource.MetadataSource == null)
+            {
+                updatedSeries.MetadataSource = series.MetadataSource;
+            }
 
             series.ApplyChanges(updatedSeries);
 

@@ -730,7 +730,7 @@ namespace NzbDrone.Core.Organizer
         private void AddIdTokens(Dictionary<string, Func<TokenMatch, string>> tokenHandlers, Series series)
         {
             tokenHandlers["{ImdbId}"] = m => series.ImdbId ?? string.Empty;
-            tokenHandlers["{TvdbId}"] = m => series.TvdbId.ToString();
+            tokenHandlers["{TvdbId}"] = m => series.TvdbId > 0 ? series.TvdbId.ToString() : string.Empty;
             tokenHandlers["{TvMazeId}"] = m => series.TvMazeId > 0 ? series.TvMazeId.ToString() : string.Empty;
             tokenHandlers["{TmdbId}"] = m => series.TmdbId > 0 ? series.TmdbId.ToString() : string.Empty;
         }

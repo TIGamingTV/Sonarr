@@ -47,6 +47,12 @@ namespace Sonarr.Api.V3.Series
             {
                 var resource = currentSeries.ToResource();
 
+                // Let the server pick the configured default source for new series that are available on TheTVDB
+                if (currentSeries.Id == 0 && currentSeries.TvdbId > 0)
+                {
+                    resource.MetadataSource = null;
+                }
+
                 _coverMapper.ConvertToLocalUrls(resource.Id, resource.Images, resource.Added);
 
                 var poster = currentSeries.Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Poster);

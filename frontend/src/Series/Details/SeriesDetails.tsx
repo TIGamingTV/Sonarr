@@ -38,6 +38,7 @@ import OrganizePreviewModal from 'Organize/OrganizePreviewModal';
 import DeleteSeriesModal from 'Series/Delete/DeleteSeriesModal';
 import EditSeriesModal from 'Series/Edit/EditSeriesModal';
 import SeriesHistoryModal from 'Series/History/SeriesHistoryModal';
+import { getMetadataSourceName } from 'Series/metadataSource';
 import MonitoringOptionsModal from 'Series/MonitoringOptions/MonitoringOptionsModal';
 import { Image, SeriesStatus, Statistics } from 'Series/Series';
 import SeriesGenres from 'Series/SeriesGenres';
@@ -863,7 +864,9 @@ function SeriesDetails({ seriesId }: SeriesDetailsProps) {
                 <div className={styles.heroFooter}>
                   <SeriesDetailsPath path={path} pendingPath={pendingPath} />
 
-                  <MetadataAttribution />
+                  <MetadataAttribution
+                    providers={[getMetadataSourceName(series.metadataSource)]}
+                  />
                 </div>
               </div>
             </div>

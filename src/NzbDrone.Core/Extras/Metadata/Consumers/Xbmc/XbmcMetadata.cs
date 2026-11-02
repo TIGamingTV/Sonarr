@@ -162,12 +162,17 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
                 tvShow.Add(new XElement("plot", series.Overview));
                 tvShow.Add(new XElement("mpaa", series.Certification));
-                tvShow.Add(new XElement("id", series.TvdbId));
+                var hasTvdbId = series.TvdbId > 0;
 
-                var uniqueId = new XElement("uniqueid", series.TvdbId);
-                uniqueId.SetAttributeValue("type", "tvdb");
-                uniqueId.SetAttributeValue("default", true);
-                tvShow.Add(uniqueId);
+                tvShow.Add(new XElement("id", hasTvdbId ? series.TvdbId : series.TmdbId));
+
+                if (hasTvdbId)
+                {
+                    var uniqueId = new XElement("uniqueid", series.TvdbId);
+                    uniqueId.SetAttributeValue("type", "tvdb");
+                    uniqueId.SetAttributeValue("default", true);
+                    tvShow.Add(uniqueId);
+                }
 
                 if (series.ImdbId.IsNotNullOrWhiteSpace())
                 {
@@ -180,6 +185,12 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                 {
                     var tmdbId = new XElement("uniqueid", series.TmdbId);
                     tmdbId.SetAttributeValue("type", "tmdb");
+
+                    if (!hasTvdbId)
+                    {
+                        tmdbId.SetAttributeValue("default", true);
+                    }
+
                     tvShow.Add(tmdbId);
                 }
 
@@ -269,7 +280,9 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                     xmlResult += Environment.NewLine;
                 }
 
-                xmlResult += "https://www.thetvdb.com/?tab=series&id=" + series.TvdbId;
+                xmlResult += series.TvdbId > 0
+                    ? "https://www.thetvdb.com/?tab=series&id=" + series.TvdbId
+                    : "https://www.themoviedb.org/tv/" + series.TmdbId;
             }
 
             return xmlResult.IsNullOrWhiteSpace() ? null : new MetadataFileResult("tvshow.nfo", xmlResult);
@@ -319,10 +332,13 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                     details.Add(new XElement("displayepisode", episode.AiredBeforeEpisodeNumber ?? -1));
                 }
 
-                var tvdbId = new XElement("uniqueid", episode.TvdbId);
-                tvdbId.SetAttributeValue("type", "tvdb");
-                tvdbId.SetAttributeValue("default", true);
-                details.Add(tvdbId);
+                if (episode.TvdbId > 0)
+                {
+                    var tvdbId = new XElement("uniqueid", episode.TvdbId);
+                    tvdbId.SetAttributeValue("type", "tvdb");
+                    tvdbId.SetAttributeValue("default", true);
+                    details.Add(tvdbId);
+                }
 
                 var sonarrId = new XElement("uniqueid", episode.Id);
                 sonarrId.SetAttributeValue("type", "sonarr");

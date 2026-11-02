@@ -751,6 +751,7 @@ interface SaveSeriesEditorPayload {
   monitored?: boolean;
   qualityProfileId?: number;
   seriesType?: string;
+  metadataSource?: string;
   seasonFolder?: boolean;
   rootFolderPath?: string;
   tags?: number[];

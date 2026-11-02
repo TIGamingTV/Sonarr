@@ -4,6 +4,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.DataAugmentation.Scene;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Events;
@@ -11,6 +12,8 @@ using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.MetadataSource.Tmdb;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.SeriesStats;
 using NzbDrone.Core.Tv;
@@ -43,6 +46,7 @@ namespace Sonarr.Api.V3.Series
         private readonly ISceneMappingService _sceneMappingService;
         private readonly IMapCoversToLocal _coverMapper;
         private readonly IRootFolderService _rootFolderService;
+        private readonly IConfigService _configService;
 
         public SeriesController(IBroadcastSignalRMessage signalRBroadcaster,
                             ISeriesService seriesService,
@@ -60,7 +64,9 @@ namespace Sonarr.Api.V3.Series
                             SystemFolderValidator systemFolderValidator,
                             QualityProfileExistsValidator qualityProfileExistsValidator,
                             RootFolderExistsValidator rootFolderExistsValidator,
-                            SeriesFolderAsRootFolderValidator seriesFolderAsRootFolderValidator)
+                            SeriesFolderAsRootFolderValidator seriesFolderAsRootFolderValidator,
+                            IConfigService configService,
+                            ITmdbProxy tmdbProxy)
             : base(signalRBroadcaster)
         {
             _seriesService = seriesService;
@@ -71,6 +77,7 @@ namespace Sonarr.Api.V3.Series
 
             _coverMapper = coverMapper;
             _rootFolderService = rootFolderService;
+            _configService = configService;
 
             SharedValidator.RuleFor(s => s.Path).Cascade(CascadeMode.Stop)
                 .IsValidPath()
@@ -101,7 +108,19 @@ namespace Sonarr.Api.V3.Series
                 .SetValidator(qualityProfileExistsValidator);
 
             PostValidator.RuleFor(s => s.Title).NotEmpty();
-            PostValidator.RuleFor(s => s.TvdbId).GreaterThan(0).SetValidator(seriesExistsValidator);
+
+            // Negative TVDB IDs are placeholders for series that are only available on TMDB
+            PostValidator.RuleFor(s => s.TvdbId).NotEqual(0).SetValidator(seriesExistsValidator);
+
+            SharedValidator.RuleFor(s => s.MetadataSource)
+                .Must(_ => tmdbProxy.IsConfigured)
+                .When(s => s.MetadataSource == MetadataSourceType.Tmdb || s.TvdbId < 0)
+                .WithMessage("A TMDB API key must be configured to use TMDB as the metadata source");
+
+            SharedValidator.RuleFor(s => s.MetadataSource)
+                .Must((s, _) => s.TvdbId > 0)
+                .When(s => s.MetadataSource == MetadataSourceType.Tvdb)
+                .WithMessage("This series is not available on TheTVDB");
         }
 
         [HttpGet]
@@ -180,7 +199,15 @@ namespace Sonarr.Api.V3.Series
         [Produces("application/json")]
         public ActionResult<SeriesResource> AddSeries([FromBody] SeriesResource seriesResource)
         {
-            var series = _addSeriesService.AddSeries(seriesResource.ToModel());
+            var model = seriesResource.ToModel();
+
+            // Clients that don't know about metadata sources (e.g. Seerr) get the configured default
+            if (seriesResource.MetadataSource == null && model.TvdbId > 0)
+            {
+                model.MetadataSource = _configService.DefaultMetadataSource;
+            }
+
+            var series = _addSeriesService.AddSeries(model);
 
             return Created(series.Id);
         }

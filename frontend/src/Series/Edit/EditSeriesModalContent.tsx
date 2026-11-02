@@ -26,6 +26,7 @@ import {
   sizes,
   tooltipPositions,
 } from 'Helpers/Props';
+import { useMetadataSourceOptions } from 'Series/metadataSource';
 import MoveSeriesModal from 'Series/MoveSeries/MoveSeriesModal';
 import Series, { Statistics } from 'Series/Series';
 import SeriesMovePending from 'Series/SeriesMovePending';
@@ -60,6 +61,9 @@ function EditSeriesModalContent({
     seasonType,
     seasonTypes,
     language,
+    metadataSource,
+    tvdbId,
+    tmdbId,
     path,
     pendingPath,
     tags,
@@ -86,6 +90,7 @@ function EditSeriesModalContent({
   const [isConfirmMoveModalOpen, setIsConfirmMoveModalOpen] = useState(false);
 
   const { saveSeries, isSaving, saveError } = useSaveSeries();
+  const metadataSourceOptions = useMetadataSourceOptions({ tvdbId, tmdbId });
   const wasSaving = usePrevious(isSaving);
 
   const { settings, ...otherSettings } = useMemo(() => {
@@ -98,6 +103,7 @@ function EditSeriesModalContent({
         seriesType,
         seasonType,
         language,
+        metadataSource: metadataSource ?? (tvdbId > 0 ? 'tvdb' : 'tmdb'),
         path,
         tags,
       },
@@ -112,6 +118,8 @@ function EditSeriesModalContent({
     seriesType,
     seasonType,
     language,
+    metadataSource,
+    tvdbId,
     path,
     tags,
     pendingChanges,
@@ -268,6 +276,27 @@ function EditSeriesModalContent({
               type={inputTypes.LANGUAGE_SELECT}
               name="language"
               {...settings.language}
+              onChange={handleInputChange}
+            />
+          </FormRow>
+
+          <FormRow size={sizes.MEDIUM}>
+            <FormLabel>{translate('MetadataSource')}</FormLabel>
+
+            <FormInputHelpText text={translate('MetadataSourceHelpText')} />
+            <FormInputHelpText
+              text={
+                settings.metadataSource.value === metadataSource
+                  ? undefined
+                  : translate('MetadataSourceChangeHelpTextWarning')
+              }
+              isWarning={true}
+            />
+            <FormInput
+              type={inputTypes.SELECT}
+              name="metadataSource"
+              {...settings.metadataSource}
+              values={metadataSourceOptions}
               onChange={handleInputChange}
             />
           </FormRow>

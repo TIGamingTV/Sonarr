@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import IconButton from 'Components/Link/IconButton';
 import Link from 'Components/Link/Link';
 import { icons } from 'Helpers/Props';
+import { getTmdbUrl, getTvdbUrl } from 'Series/metadataSource';
 import useExistingSeries from 'Series/useExistingSeries';
 import translate from 'Utilities/String/translate';
 import ImportSeriesTitle from './ImportSeriesTitle';
@@ -11,6 +12,7 @@ import styles from './ImportSeriesSearchResult.module.css';
 interface ImportSeriesSearchResultProps {
   id: string;
   tvdbId: number;
+  tmdbId: number;
   title: string;
   year: number;
   network?: string;
@@ -21,6 +23,7 @@ interface ImportSeriesSearchResultProps {
 function ImportSeriesSearchResult({
   id,
   tvdbId,
+  tmdbId,
   title,
   year,
   network,
@@ -28,6 +31,10 @@ function ImportSeriesSearchResult({
   onPress,
 }: ImportSeriesSearchResultProps) {
   const isExistingSeries = useExistingSeries(tvdbId);
+  const linkTitle =
+    tvdbId > 0
+      ? translate('ViewSeriesOnTvdb', { title })
+      : translate('ViewSeriesOnTmdb', { title });
 
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -69,9 +76,9 @@ function ImportSeriesSearchResult({
           iconClassName={styles.tvdbLinkIcon}
           name={icons.EXTERNAL_LINK}
           size={16}
-          to={`https://www.thetvdb.com/?tab=series&id=${tvdbId}`}
-          title={translate('ViewSeriesOnTvdb', { title })}
-          aria-label={translate('ViewSeriesOnTvdb', { title })}
+          to={tvdbId > 0 ? getTvdbUrl(tvdbId) : getTmdbUrl(tmdbId)}
+          title={linkTitle}
+          aria-label={linkTitle}
         />
       </div>
     </div>

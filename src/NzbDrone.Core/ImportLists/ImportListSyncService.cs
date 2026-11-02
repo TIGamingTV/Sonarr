@@ -245,8 +245,10 @@ namespace NzbDrone.Core.ImportLists
                     pendingSeries = new Series
                     {
                         TvdbId = item.TvdbId,
+                        TmdbId = item.TmdbId,
                         Title = item.Title,
                         Year = item.Year,
+                        MetadataSource = _configService.DefaultMetadataSource,
                         Monitored = monitored,
                         MonitorNewItems = importList.MonitorNewItems,
                         RootFolderPath = importList.RootFolderPath,

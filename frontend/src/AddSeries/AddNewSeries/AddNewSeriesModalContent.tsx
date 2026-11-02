@@ -26,7 +26,11 @@ import Popover from 'Components/Tooltip/Popover';
 import { icons, inputTypes, kinds, tooltipPositions } from 'Helpers/Props';
 import Language, { DEFAULT_LANGUAGE } from 'Language/Language';
 import { useLanguageById } from 'Language/useLanguages';
-import { SeriesType } from 'Series/Series';
+import {
+  useDefaultMetadataSource,
+  useMetadataSourceOptions,
+} from 'Series/metadataSource';
+import { MetadataSource, SeriesType } from 'Series/Series';
 import SeriesPoster from 'Series/SeriesPoster';
 import { useMetadataSourceSettingsValues } from 'Settings/MetadataSource/useMetadataSourceSettings';
 import { useIsWindows } from 'System/Status/useSystemStatus';
@@ -57,6 +61,8 @@ function AddNewSeriesModalContent({
     translations,
     folder: originalFolder,
     folders,
+    tvdbId,
+    tmdbId,
   } = series;
   const options = useAddSeriesOptions();
   const { preferredMetadataLanguage } = useMetadataSourceSettingsValues();
@@ -74,6 +80,22 @@ function AddNewSeriesModalContent({
   const handleLanguageChange = useCallback(
     ({ value }: LanguageSelectInputOnChangeProps) => {
       setLanguage(value as Language);
+    },
+    []
+  );
+
+  const defaultMetadataSource = useDefaultMetadataSource({ tvdbId, tmdbId });
+  const metadataSourceOptions = useMetadataSourceOptions(
+    { tvdbId, tmdbId },
+    true
+  );
+  const [metadataSource, setMetadataSource] = useState<MetadataSource>(
+    defaultMetadataSource
+  );
+
+  const handleMetadataSourceChange = useCallback(
+    ({ value }: InputChanged<string>) => {
+      setMetadataSource(value as MetadataSource);
     },
     []
   );
@@ -149,13 +171,16 @@ function AddNewSeriesModalContent({
       },
       qualityProfileId: qualityProfileId.value,
       seriesType,
-      seasonType,
+      // TMDB only provides the official (aired) order
+      seasonType: metadataSource === 'tmdb' ? 'official' : seasonType,
       language,
+      metadataSource,
       seasonFolder: seasonFolder.value,
       tags: tags.value,
     });
   }, [
     series,
+    metadataSource,
     seriesType,
     seasonType,
     rootFolderPath,
@@ -317,6 +342,19 @@ function AddNewSeriesModalContent({
               </FormRow>
 
               <FormRow>
+                <FormLabel>{translate('MetadataSource')}</FormLabel>
+
+                <FormInputHelpText text={translate('MetadataSourceHelpText')} />
+                <FormInput
+                  type={inputTypes.SELECT}
+                  name="metadataSource"
+                  value={metadataSource}
+                  values={metadataSourceOptions}
+                  onChange={handleMetadataSourceChange}
+                />
+              </FormRow>
+
+              <FormRow>
                 <FormLabel>{translate('SeasonType')}</FormLabel>
 
                 <FormInputHelpText text={translate('SeasonTypeHelpText')} />
@@ -325,6 +363,7 @@ function AddNewSeriesModalContent({
                   name="seasonType"
                   value={seasonType}
                   seasonTypes={seasonTypes}
+                  isDisabled={metadataSource === 'tmdb' || !seasonTypes.length}
                   includeNoChange={false}
                   includeMixed={false}
                   onChange={handleSeasonTypeChange}
