@@ -6,6 +6,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.DataAugmentation.Scene;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Tv;
 
@@ -49,11 +50,13 @@ namespace NzbDrone.Core.Parser
                 return _seriesService.FindByTitle(title);
             }
 
-            var tvdbId = _sceneMappingService.FindTvdbId(parsedEpisodeInfo.SeriesTitle, parsedEpisodeInfo.ReleaseTitle, parsedEpisodeInfo.SeasonNumbers.FirstOrDefault(-1));
+            var sceneMapping = _sceneMappingService.FindSceneMapping(parsedEpisodeInfo.SeriesTitle, parsedEpisodeInfo.ReleaseTitle, parsedEpisodeInfo.SeasonNumbers.FirstOrDefault(-1));
 
-            if (tvdbId.HasValue)
+            if (sceneMapping != null)
             {
-                return _seriesService.FindByTvdbId(tvdbId.Value);
+                var tmdbSeries = FindTmdbSeriesOverridingSceneMapping(parsedEpisodeInfo, sceneMapping, null);
+
+                return tmdbSeries ?? _seriesService.FindByTvdbId(sceneMapping.TvdbId);
             }
 
             var series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitle);
@@ -153,6 +156,62 @@ namespace NzbDrone.Core.Parser
             return null;
         }
 
+        // TheTVDB sometimes combines separate shows into one series (e.g. Dragons: Race to the Edge is part of
+        // DreamWorks Dragons) and scene mappings point the separate titles at it. A series using TMDB metadata
+        // whose title matches exactly takes precedence over a mapping to a different TVDB ID.
+        private Series FindTmdbSeriesOverridingSceneMapping(ParsedEpisodeInfo parsedEpisodeInfo, SceneMapping sceneMapping, SearchCriteriaBase searchCriteria)
+        {
+            var searchSeries = searchCriteria?.Series;
+
+            if (searchSeries != null && searchSeries.TvdbId == sceneMapping.TvdbId)
+            {
+                return null;
+            }
+
+            if (searchSeries != null && IsTmdbSeriesNotMatchingSceneMapping(searchSeries, sceneMapping))
+            {
+                var cleanTitle = parsedEpisodeInfo.SeriesTitle.CleanSeriesTitle();
+
+                if (searchSeries.CleanTitle == cleanTitle ||
+                    (searchSeries.CleanOriginalTitle.IsNotNullOrWhiteSpace() && searchSeries.CleanOriginalTitle == cleanTitle))
+                {
+                    return searchSeries;
+                }
+            }
+
+            Series series;
+
+            try
+            {
+                series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitle);
+
+                if (series == null && parsedEpisodeInfo.SeriesTitleInfo?.Year > 0)
+                {
+                    series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitleInfo.TitleWithoutYear, parsedEpisodeInfo.SeriesTitleInfo.Year);
+                }
+            }
+            catch (MultipleSeriesFoundException)
+            {
+                // Ambiguous title, leave it to the scene mapping
+                return null;
+            }
+
+            if (series == null || !IsTmdbSeriesNotMatchingSceneMapping(series, sceneMapping))
+            {
+                return null;
+            }
+
+            _logger.Debug("'{0}' matches TMDB series {1}, ignoring scene mapping to TVDB ID {2}", parsedEpisodeInfo.SeriesTitle, series, sceneMapping.TvdbId);
+
+            return series;
+        }
+
+        private static bool IsTmdbSeriesNotMatchingSceneMapping(Series series, SceneMapping sceneMapping)
+        {
+            return (series.MetadataSource == MetadataSourceType.Tmdb || series.TvdbId <= 0) &&
+                   series.TvdbId != sceneMapping.TvdbId;
+        }
+
         public RemoteEpisode Map(ParsedEpisodeInfo parsedEpisodeInfo, int tvdbId, int tvRageId, string imdbId, SearchCriteriaBase searchCriteria = null)
         {
             return Map(parsedEpisodeInfo, tvdbId, tvRageId, imdbId, null, searchCriteria);
@@ -177,6 +236,22 @@ namespace NzbDrone.Core.Parser
         {
             int? seasonNumber = parsedEpisodeInfo.SeasonNumbers.Any() ? parsedEpisodeInfo.SeasonNumbers.First() : null;
             var sceneMapping = _sceneMappingService.FindSceneMapping(parsedEpisodeInfo.SeriesTitle, parsedEpisodeInfo.ReleaseTitle, seasonNumber ?? -1);
+            var matchedTmdbSeriesByTitle = false;
+
+            // The mapping (and its season offsets) describes a TheTVDB series, ignore it for TMDB series it doesn't belong to
+            if (sceneMapping != null)
+            {
+                if (series == null)
+                {
+                    series = FindTmdbSeriesOverridingSceneMapping(parsedEpisodeInfo, sceneMapping, searchCriteria);
+                    matchedTmdbSeriesByTitle = series != null;
+                }
+
+                if (series != null && IsTmdbSeriesNotMatchingSceneMapping(series, sceneMapping))
+                {
+                    sceneMapping = null;
+                }
+            }
 
             var remoteEpisode = new RemoteEpisode
             {
@@ -184,6 +259,11 @@ namespace NzbDrone.Core.Parser
                 SceneMapping = sceneMapping,
                 MappedSeasonNumber = seasonNumber
             };
+
+            if (matchedTmdbSeriesByTitle)
+            {
+                remoteEpisode.SeriesMatchType = SeriesMatchType.Title;
+            }
 
             // For now we just detect tvdb vs scene, but we can do multiple 'origins' in the future.
             var sceneSource = true;

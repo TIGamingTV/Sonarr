@@ -8,6 +8,7 @@ using NUnit.Framework;
 using NzbDrone.Core.DataAugmentation.Scene;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Tv;
@@ -460,6 +461,94 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
 
             result.MappedSeasonNumber.Should().Be(1);
             result.SceneMapping.Should().BeNull();
+        }
+
+        private Series GivenTmdbSeries()
+        {
+            var series = Builder<Series>.CreateNew()
+                .With(s => s.Id = 20)
+                .With(s => s.Title = "Dragons: Race to the Edge")
+                .With(s => s.CleanTitle = "Dragons: Race to the Edge".CleanSeriesTitle())
+                .With(s => s.CleanOriginalTitle = null)
+                .With(s => s.TvdbId = -62617)
+                .With(s => s.TmdbId = 62617)
+                .With(s => s.MetadataSource = MetadataSourceType.Tmdb)
+                .With(s => s.SeasonType = SeasonType.Official)
+                .Build();
+
+            _parsedEpisodeInfo.SeriesTitle = "Dragons Race To The Edge";
+
+            Mocker.GetMock<ISceneMappingService>()
+                  .Setup(v => v.FindSceneMapping(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+                  .Returns(new SceneMapping { TvdbId = 261202, SceneSeasonNumber = 1, SeasonNumber = 5 });
+
+            return series;
+        }
+
+        [Test]
+        public void should_prefer_tmdb_series_matching_title_over_scene_mapping_to_another_tvdb_id()
+        {
+            var tmdbSeries = GivenTmdbSeries();
+
+            Mocker.GetMock<ISeriesService>()
+                  .Setup(s => s.FindByTitle(_parsedEpisodeInfo.SeriesTitle))
+                  .Returns(tmdbSeries);
+
+            var result = Subject.Map(_parsedEpisodeInfo, 0, 0, null);
+
+            result.Series.Should().Be(tmdbSeries);
+            result.SeriesMatchType.Should().Be(SeriesMatchType.Title);
+            result.SceneMapping.Should().BeNull();
+            result.MappedSeasonNumber.Should().Be(1);
+
+            Mocker.GetMock<ISeriesService>()
+                  .Verify(v => v.FindByTvdbId(261202), Times.Never());
+        }
+
+        [Test]
+        public void should_prefer_tmdb_search_criteria_series_matching_title_over_scene_mapping_to_another_tvdb_id()
+        {
+            var tmdbSeries = GivenTmdbSeries();
+            _singleEpisodeSearchCriteria.Series = tmdbSeries;
+
+            var result = Subject.Map(_parsedEpisodeInfo, 0, 0, null, _singleEpisodeSearchCriteria);
+
+            result.Series.Should().Be(tmdbSeries);
+            result.SceneMapping.Should().BeNull();
+
+            Mocker.GetMock<ISeriesService>()
+                  .Verify(v => v.FindByTitle(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_ignore_scene_mapping_season_offset_when_mapping_tmdb_series()
+        {
+            var tmdbSeries = GivenTmdbSeries();
+
+            var result = Subject.Map(_parsedEpisodeInfo, tmdbSeries);
+
+            result.SceneMapping.Should().BeNull();
+            result.MappedSeasonNumber.Should().Be(1);
+        }
+
+        [Test]
+        public void should_use_scene_mapping_when_title_matches_tvdb_series()
+        {
+            GivenTmdbSeries();
+
+            _series.TvdbId = 100;
+            _series.MetadataSource = MetadataSourceType.Tvdb;
+
+            Mocker.GetMock<ISeriesService>()
+                  .Setup(s => s.FindByTitle(_parsedEpisodeInfo.SeriesTitle))
+                  .Returns(_series);
+
+            var result = Subject.Map(_parsedEpisodeInfo, 0, 0, null);
+
+            result.Series.Should().BeNull();
+
+            Mocker.GetMock<ISeriesService>()
+                  .Verify(v => v.FindByTvdbId(261202), Times.Once());
         }
     }
 }

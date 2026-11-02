@@ -2,6 +2,7 @@
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.DataAugmentation.Scene;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Core.Tv;
@@ -58,6 +59,40 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
 
             result.Should().NotBeNull();
             result.TvdbId.Should().Be(100);
+        }
+
+        [Test]
+        public void should_prefer_tmdb_series_matching_title_over_scene_mapping_to_another_tvdb_id()
+        {
+            const string title = "Dragons.Race.To.The.Edge.S01E01.720p.WEB-DL-Viva";
+            var parsedTitle = Parser.Parser.ParseTitle(title).SeriesTitle;
+            var series = new Series { TvdbId = -62617, TmdbId = 62617, MetadataSource = MetadataSourceType.Tmdb };
+
+            Mocker.GetMock<ISeriesService>().Setup(v => v.FindByTitle(parsedTitle)).Returns(series);
+            Mocker.GetMock<ISceneMappingService>()
+                  .Setup(v => v.FindSceneMapping(parsedTitle, It.IsAny<string>(), It.IsAny<int>()))
+                  .Returns(new SceneMapping { TvdbId = 261202 });
+
+            Subject.GetSeries(title).Should().Be(series);
+
+            Mocker.GetMock<ISeriesService>()
+                  .Verify(v => v.FindByTvdbId(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void should_use_scene_mapping_when_title_matches_tvdb_series()
+        {
+            const string title = "Dragons.Race.To.The.Edge.S01E01.720p.WEB-DL-Viva";
+            var parsedTitle = Parser.Parser.ParseTitle(title).SeriesTitle;
+            var mappedSeries = new Series { TvdbId = 261202 };
+
+            Mocker.GetMock<ISeriesService>().Setup(v => v.FindByTitle(parsedTitle)).Returns(new Series { TvdbId = 100 });
+            Mocker.GetMock<ISeriesService>().Setup(v => v.FindByTvdbId(261202)).Returns(mappedSeries);
+            Mocker.GetMock<ISceneMappingService>()
+                  .Setup(v => v.FindSceneMapping(parsedTitle, It.IsAny<string>(), It.IsAny<int>()))
+                  .Returns(new SceneMapping { TvdbId = 261202 });
+
+            Subject.GetSeries(title).Should().Be(mappedSeries);
         }
     }
 }
