@@ -1,0 +1,193 @@
+name: Docker
+
+on:
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - "src/Sonarr.Api.*/openapi.json"
+      - "**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FRAMEWORK: net10.0
+  BRANCH: develop
+  VERSION: 5.0.0
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.variables.outputs.version }}
+      image: ${{ steps.variables.outputs.image }}
+    steps:
+      - name: Setup Environment Variables
+        id: variables
+        shell: bash
+        run: |
+          echo "version=${VERSION}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sonarr" >> "$GITHUB_OUTPUT"
+
+  backend:
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        runtime: [linux-x64, linux-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          branch: ${{ env.BRANCH }}
+          version: ${{ needs.prepare.outputs.version }}
+          framework: ${{ env.FRAMEWORK }}
+          runtime: ${{ matrix.runtime }}
+          package_tests: false
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Volta
+        uses: volta-cli/action@v5
+
+      - name: Yarn Install
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Publish UI Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker_ui
+          path: _output/UI/**/*
+
+  docker:
+    needs: [prepare, backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Download Backend Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: build-linux-*
+          path: _output
+          merge-multiple: true
+
+      - name: Download UI Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: docker_ui
+          path: _output/UI
+
+      - name: Assemble Docker Context
+        shell: bash
+        env:
+          SONARR_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          context=_docker
+          rm -rf "$context"
+          mkdir -p "$context"
+          cp distribution/docker/entrypoint.sh "$context/"
+
+          for pair in linux-x64:amd64 linux-arm64:arm64; do
+            runtime="${pair%%:*}"
+            arch="${pair##*:}"
+            source="_output/$runtime/$FRAMEWORK/Sonarr"
+
+            if [ ! -f "$source/Sonarr" ]; then
+              echo "::error::Missing build output for $runtime in $source"
+              exit 1
+            fi
+
+            mkdir -p "$context/$arch"
+            cp -r "$source" "$context/$arch/bin"
+            cp -r _output/UI "$context/$arch/bin/UI"
+
+            # Disables the built-in updater, updates are done by pulling a new image
+            {
+              echo "PackageVersion=$SONARR_VERSION"
+              echo "PackageAuthor=[${GITHUB_REPOSITORY_OWNER}](https://github.com/${GITHUB_REPOSITORY})"
+              echo "UpdateMethod=Docker"
+              echo "UpdateMethodMessage=Pull the latest image from ghcr.io to update"
+              echo "Branch=$BRANCH"
+            } > "$context/$arch/package_info"
+          done
+
+          find "$context" -maxdepth 3 | sort | head -50
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ needs.prepare.outputs.image }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ env.BRANCH }}
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=Sonarr
+            org.opencontainers.image.description=Sonarr with TMDB as an additional metadata source
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+
+      - name: Build and Push
+        uses: docker/build-push-action@v7
+        with:
+          context: _docker
+          file: distribution/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Docker image published"
+            echo ""
+            echo '```'
+            echo "docker pull ${{ needs.prepare.outputs.image }}:latest"
+            echo '```'
+            echo ""
+            echo "Tags:"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
